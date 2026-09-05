@@ -1,0 +1,13 @@
+build/
+*.o
+*.elf
+*.bin
+*.hex
+
+*.log
+trace.txt
+
+.DS_Store
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
