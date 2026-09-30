@@ -1,6 +1,6 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -I ../sim/include
+CFLAGS = -Wall -Wextra -Werror -pedantic -I ./sim/include
 
-test: ../sim/src/decoder.c ../sim/src/cpu_state.c ../tests/c/decoder_entry/test_decoder.c
-	$(CC) $(CFLAGS) $^ -o test_decoder
-	./test_decoder
+test: ./sim/src/decoder.c ./sim/src/cpu_state.c ./sim/src/alu.c ./tests/c/cpu_simulator/test_alu.c
+	$(CC) $(CFLAGS) $^ -o test_alu
+	./test_alu
