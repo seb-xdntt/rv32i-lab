@@ -18,7 +18,3 @@ _start:
     li   t0, 1
     la   t1, tohost
     sw   t0, 0(t1)
-
-halt:
-    j    halt
-    
