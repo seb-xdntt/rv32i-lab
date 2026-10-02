@@ -4,7 +4,7 @@
 #include "config.h"
 #include <stdint.h>
 
-void decoder_init(DECODED_INSTRUCTION* decodedInstruction);
+// Przetwarza 32-bitowe słowo maszynowe (instrukcję) na strukturę zdekodowanej instrukcji
 void decoder_decode(DECODED_INSTRUCTION* decodedInstruction, uint32_t instruction);
 
 #endif

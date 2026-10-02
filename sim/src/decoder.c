@@ -1,5 +1,6 @@
 #include "decoder.h"
 
+// Kody operacji (najmłodsze 7 bitów instrukcji) dla głównych formatów RISC-V
 #define OPCODE_R_TYPE    0x33
 #define OPCODE_I_IMM     0x13
 #define OPCODE_I_LOAD    0x03
@@ -10,30 +11,29 @@
 #define OPCODE_U_AUIPC   0x17
 #define OPCODE_J_JAL     0x6F
 
-void decoder_init(DECODED_INSTRUCTION* decodedInstruction) 
+void decoder_decode(DECODED_INSTRUCTION* decodedInstruction, uint32_t instruction)
 {
+    // Inicjalizacja struktury zdekodowanej instrukcji
     decodedInstruction->rs1 = 0;
     decodedInstruction->rs2 = 0;
     decodedInstruction->rd  = 0;
     decodedInstruction->imm = 0;
     decodedInstruction->op  = OP_UNKNOWN;
-}
 
-void decoder_decode(DECODED_INSTRUCTION* decodedInstruction, uint32_t instruction) 
-{
-    decoder_init(decodedInstruction);
-    
-    uint8_t opcode = instruction & 0x7F;
-    uint8_t funct3 = (instruction >> 12) & 0x07;
-    uint8_t funct7 = (instruction >> 25) & 0x7F;
+    // Wyodrębnienie głównych pól instrukcji
+    uint8_t opcode = instruction & 0x7F;             // inst[6:0]
+    uint8_t funct3 = (instruction >> 12) & 0x07;     // inst[14:12]
+    uint8_t funct7 = (instruction >> 25) & 0x7F;     // inst[31:25]
 
-    switch (opcode) 
+    switch (opcode)
     {
         case OPCODE_R_TYPE:
+            // Format R używa trzech rejestrów (rs1, rs2, rd) i nie występuje wartość natychmiastowa.
             decodedInstruction->rs1 = (instruction >> 15) & 0x1F;
             decodedInstruction->rs2 = (instruction >> 20) & 0x1F;
             decodedInstruction->rd  = (instruction >> 7)  & 0x1F;
-            switch (funct3) 
+            
+            switch (funct3)
             {
                 case 0x00:
                     if (funct7 == 0x00)      decodedInstruction->op = OP_ADD;
@@ -56,14 +56,16 @@ void decoder_decode(DECODED_INSTRUCTION* decodedInstruction, uint32_t instructio
         case OPCODE_I_IMM:
         case OPCODE_I_LOAD:
         case OPCODE_I_JALR:
+            // Format I używa dwóch rejestrów (rs1, rd) i 12-bitowej stałej natychmiastowej
             decodedInstruction->rs1 = (instruction >> 15) & 0x1F;
             decodedInstruction->rd  = (instruction >> 7)  & 0x1F;
             
+            // Rzutowanie na 32-bitową wartość natychmiastową z rozszerzonym znakiem
             decodedInstruction->imm = (int32_t)instruction >> 20;
 
-            if (opcode == OPCODE_I_IMM) 
+            if (opcode == OPCODE_I_IMM)
             {
-                switch (funct3) 
+                switch (funct3)
                 {
                     case 0x00: decodedInstruction->op = OP_ADDI;  break;
                     case 0x01: decodedInstruction->op = OP_SLLI;  break;
@@ -71,6 +73,7 @@ void decoder_decode(DECODED_INSTRUCTION* decodedInstruction, uint32_t instructio
                     case 0x03: decodedInstruction->op = OP_SLTIU; break;
                     case 0x04: decodedInstruction->op = OP_XORI;  break;
                     case 0x05:
+                        // SRAI i SRLI korzystają z tego samego funct3, rozróżniają się tylko funct7
                         if (funct7 == 0x00)      decodedInstruction->op = OP_SRLI;
                         else if (funct7 == 0x20) decodedInstruction->op = OP_SRAI;
                         break;
@@ -79,9 +82,9 @@ void decoder_decode(DECODED_INSTRUCTION* decodedInstruction, uint32_t instructio
                     default:   decodedInstruction->op = OP_UNKNOWN; break;
                 }
             }
-            else if (opcode == OPCODE_I_LOAD) 
+            else if (opcode == OPCODE_I_LOAD)
             {
-                switch (funct3) 
+                switch (funct3)
                 {
                     case 0x00: decodedInstruction->op = OP_LB;  break;
                     case 0x01: decodedInstruction->op = OP_LH;  break;
@@ -91,22 +94,24 @@ void decoder_decode(DECODED_INSTRUCTION* decodedInstruction, uint32_t instructio
                     default:   decodedInstruction->op = OP_UNKNOWN; break;
                 }
             }
-            else if (opcode == OPCODE_I_JALR) 
-            {
-                if (funct3 == 0x00) decodedInstruction->op = OP_JALR;
-            }
+            else if (opcode == OPCODE_I_JALR) if (funct3 == 0x00) decodedInstruction->op = OP_JALR;
+            
             break;
 
         case OPCODE_S_TYPE:
+            // Format S (zapis do pamięci) nie używa rd. 
+            // Stała natychmiastowa dzieli się na dwie części w instrukcji.
             decodedInstruction->rs1 = (instruction >> 15) & 0x1F;
             decodedInstruction->rs2 = (instruction >> 20) & 0x1F;
+            
+            // Składanie 12 bitowej stałej
             decodedInstruction->imm = ((instruction >> 7)  & 0x0000001F)
                                     | ((instruction >> 20) & 0x00000FE0);
             
-            if (decodedInstruction->imm & 0x800) {
-                decodedInstruction->imm |= 0xFFFFF000;
-            }
-            switch (funct3) 
+            // Rozszerzanie znaku z 11 bitu
+            if (decodedInstruction->imm & 0x800) decodedInstruction->imm |= 0xFFFFF000;
+            
+            switch (funct3)
             {
                 case 0x00: decodedInstruction->op = OP_SB; break;
                 case 0x01: decodedInstruction->op = OP_SH; break;
@@ -116,17 +121,19 @@ void decoder_decode(DECODED_INSTRUCTION* decodedInstruction, uint32_t instructio
             break;
 
         case OPCODE_B_TYPE:
+            // Format B (skoki) posiada przesunięte mapowanie bitów
             decodedInstruction->rs1 = (instruction >> 15) & 0x1F;
             decodedInstruction->rs2 = (instruction >> 20) & 0x1F;
+            
             decodedInstruction->imm = ((instruction >> 7)  & 0x0000001E)
                                     | ((instruction >> 20) & 0x000007E0)
                                     | ((instruction << 4)  & 0x00000800)
                                     | ((instruction >> 19) & 0x00001000);
             
-            if (decodedInstruction->imm & 0x1000) {
-                decodedInstruction->imm |= 0xFFFFE000;
-            }
-            switch (funct3) 
+            // Rozszerzenie znaku z 13 bitu
+            if (decodedInstruction->imm & 0x1000) decodedInstruction->imm |= 0xFFFFE000;
+            
+            switch (funct3)
             {
                 case 0x00: decodedInstruction->op = OP_BEQ;  break;
                 case 0x01: decodedInstruction->op = OP_BNE;  break;
@@ -140,22 +147,25 @@ void decoder_decode(DECODED_INSTRUCTION* decodedInstruction, uint32_t instructio
 
         case OPCODE_U_LUI:
         case OPCODE_U_AUIPC:
+            // Format U przenosi 20-bitową stałą na najstarsze bity
             decodedInstruction->rd  = (instruction >> 7) & 0x1F;
             decodedInstruction->imm = (int32_t)(instruction & 0xFFFFF000);
+            
             if (opcode == OPCODE_U_LUI) decodedInstruction->op = OP_LUI;
             else                        decodedInstruction->op = OP_AUIPC;
             break;
 
         case OPCODE_J_JAL:
+            // Format J (JAL) składa wyodrębnioną 20-bitową stałą
             decodedInstruction->rd  = (instruction >> 7) & 0x1F;
             decodedInstruction->imm = ((instruction >> 20) & 0x000007FE)
                                     | ((instruction >> 9)  & 0x00000800)
                                     | (instruction         & 0x000FF000)
                                     | ((instruction >> 11) & 0x00100000);
             
-            if (decodedInstruction->imm & 0x100000) {
-                decodedInstruction->imm |= 0xFFF00000;
-            }
+            // Rozszerzenie znaku z 21 bitu
+            if (decodedInstruction->imm & 0x100000) decodedInstruction->imm |= 0xFFF00000;
+        
             decodedInstruction->op = OP_JAL;
             break;
 
