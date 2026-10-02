@@ -1,6 +1,6 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -Werror -pedantic -I ./sim/include
+CFLAGS = -std=c99 -Wall -Wextra -Werror -pedantic -I ./sim/include
 
-test: ./sim/src/decoder.c ./sim/src/cpu_state.c ./sim/src/alu.c ./tests/c/cpu_simulator/test_alu.c
-	$(CC) $(CFLAGS) $^ -o test_alu
-	./test_alu
+test: ./sim/src/cpu_state.c ./sim/src/memory.c ./tests/c/cpu_simulator/test_memory.c
+	$(CC) $(CFLAGS) $^ -o test_memory
+	./test_memory
